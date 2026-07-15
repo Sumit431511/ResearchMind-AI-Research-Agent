@@ -1,15 +1,16 @@
 # ResearchMind — Multi-Agent AI Research System
 
-A 4-agent AI pipeline that researches any topic end-to-end: searching the web, scraping the most relevant source, drafting a structured report, and critiquing its own output — all orchestrated with LangChain + LangGraph and served through a Streamlit UI.
+ResearchMind is a multi-stage AI research pipeline that researches a topic end-to-end: searching the web, scraping multiple sources, drafting a structured report, critiquing the draft, and optionally revising it once before returning the final output.
 
 ## How it works
 
-The pipeline runs four specialized agents/chains in sequence, each one feeding the next:
+The pipeline now runs through a shared orchestration layer so both the CLI and Streamlit app use the same logic:
 
-1. **Search Agent** — Uses the Tavily API to find recent, reliable information on the topic (titles, URLs, snippets).
-2. **Reader Agent** — Picks the most relevant URL from the search results and scrapes it for deeper content using BeautifulSoup.
-3. **Writer Chain** — Synthesizes the search results and scraped content into a structured report (Introduction, Key Findings, Conclusion, Sources).
-4. **Critic Chain** — Reviews the report and returns a score out of 10, strengths, areas to improve, and a one-line verdict.
+1. **Search** — Uses Tavily to gather recent sources.
+2. **Multi-source reader** — Scrapes the top sources in parallel with retry and timeout protection.
+3. **Writer** — Synthesizes retrieved evidence into a structured report.
+4. **Critic** — Scores the draft and points out weaknesses.
+5. **Revision loop** — If the score is below the configured threshold, the report is revised once using the critic feedback.
 
 ```
 Topic
@@ -26,20 +27,25 @@ Topic
 
 ## Tech stack
 
-- **LangChain / LangGraph** — agent orchestration (`create_agent`) and chains
+- **LangChain** — prompt chains and optional tool agents
 - **Groq** — LLM inference (`llama-3.3-70b-versatile`)
 - **Tavily** — web search API
 - **BeautifulSoup4 + Requests** — web scraping
+- **Pydantic** — typed pipeline state
+- **Tenacity** — retry handling
 - **Streamlit** — UI
 
 ## Project structure
 
 ```
 .
-├── app.py          # Streamlit UI — runs the pipeline interactively
-├── pipeline.py      # CLI entry point — runs the pipeline end-to-end in the terminal
-├── agents.py        # Agent + chain definitions (search, reader, writer, critic)
-├── tools.py         # Tool implementations (web_search, scrape_url)
+├── app.py           # Streamlit UI
+├── pipeline.py      # CLI entry point
+├── orchestrator.py  # Shared pipeline orchestration
+├── agents.py        # Writer / critic / revision chains
+├── tools.py         # Search and scraping helpers
+├── models.py        # Typed pipeline state models
+├── config.py        # Environment-driven settings
 ├── requirements.txt
 └── .env.example
 ```
@@ -82,15 +88,22 @@ streamlit run app.py
 python pipeline.py
 ```
 
-## Example output
+## Configuration
 
-Enter a topic like `"Quantum computing breakthroughs in 2025"` and the pipeline will return a structured research report with sources, plus a critic review scoring the report's quality — downloadable as a `.md` file.
+You can tune the pipeline behavior with environment variables:
+
+- `SEARCH_RESULTS_LIMIT`
+- `SCRAPE_SOURCE_LIMIT`
+- `SCRAPE_CHAR_LIMIT`
+- `CRITIC_PASS_SCORE`
+- `MAX_REVISION_ROUNDS`
+- `GROQ_MODEL`
 
 ## Known limitations / roadmap
 
-- Reader agent scrapes a single URL; multi-URL synthesis would improve depth
-- No rewrite loop yet — low critic scores don't currently trigger a revision pass
-- Scraping can fail silently on JS-heavy or paywalled sites
+- JS-heavy or paywalled pages may still return weak content
+- Source ranking is still based on Tavily order rather than a dedicated ranking model
+- There are not yet automated tests or persistent run history
 
 ## License
 

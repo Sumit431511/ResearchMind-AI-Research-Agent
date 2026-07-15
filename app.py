@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from agents import build_reader_agent, build_search_agent, writer_chain, crictic_chain
+from orchestrator import run_research_pipeline
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -312,9 +312,16 @@ def step_card(num: str, title: str, state: str, desc: str = ""):
 
 
 # ── Session state init ────────────────────────────────────────────────────────
-for key in ("results", "running", "done"):
-    if key not in st.session_state:
-        st.session_state[key] = {} if key == "results" else False
+if "results" not in st.session_state:
+    st.session_state.results = {}
+if "running" not in st.session_state:
+    st.session_state.running = False
+if "done" not in st.session_state:
+    st.session_state.done = False
+if "error" not in st.session_state:
+    st.session_state.error = None
+if "status_log" not in st.session_state:
+    st.session_state.status_log = []
 
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
@@ -370,22 +377,23 @@ with col_pipeline:
     st.markdown('<div class="section-heading">Pipeline</div>', unsafe_allow_html=True)
 
     r = st.session_state.results
-    done = st.session_state.done
 
     def s(step):
         if not r:
             return "waiting"
-        steps = ["search", "reader", "writer", "critic"]
-        idx = steps.index(step)
-        completed = list(r.keys())
-        # figure out which steps are done
-        if step in r:
+        completed_map = {
+            "search": bool(r.get("search_results")),
+            "reader": bool(r.get("scraped_sources")),
+            "writer": bool(r.get("report")),
+            "critic": bool(r.get("critique")),
+        }
+        if completed_map.get(step):
             return "done"
-        # which step is running now (first not in r)
         if st.session_state.running:
-            for i, k in enumerate(steps):
-                if k not in r:
-                    return "running" if k == step else "waiting"
+            step_order = ["search", "reader", "writer", "critic"]
+            for item in step_order:
+                if not completed_map[item]:
+                    return "running" if item == step else "waiting"
         return "waiting"
 
     step_card("01", "Search Agent",  s("search"), "Gathers recent web information")
@@ -402,101 +410,95 @@ if run_btn:
         st.session_state.results = {}
         st.session_state.running = True
         st.session_state.done = False
+        st.session_state.error = None
+        st.session_state.status_log = []
+
+        try:
+            with st.status("Running research pipeline...", expanded=True) as status:
+                def on_progress(step: str, message: str) -> None:
+                    st.session_state.status_log.append((step, message))
+                    status.write(f"{step.title()}: {message}")
+
+                pipeline_state = run_research_pipeline(topic.strip(), progress_callback=on_progress)
+                st.session_state.results = pipeline_state.model_dump()
+                status.update(label="Pipeline completed", state="complete", expanded=False)
+            st.session_state.done = True
+        except Exception as exc:
+            st.session_state.error = str(exc)
+            st.session_state.done = False
+        finally:
+            st.session_state.running = False
         st.rerun()
-
-if st.session_state.running and not st.session_state.done:
-    results = {}
-    topic_val = st.session_state.topic_input
-
-    # ── Step 1: Search ──
-    with st.spinner("🔍  Search Agent is working…"):
-        search_agent = build_search_agent()
-        sr = search_agent.invoke({
-            "messages": [("user", f"Find recent, reliable and detailed information about: {topic_val}")]
-        })
-        results["search"] = sr["messages"][-1].content
-        st.session_state.results = dict(results)
-    st.rerun() if False else None   # keep inline for now
-
-    # ── Step 2: Reader ──
-    with st.spinner("📄  Reader Agent is scraping top resources…"):
-        reader_agent = build_reader_agent()
-        rr = reader_agent.invoke({
-            "messages": [("user",
-                f"Based on the following search results about '{topic_val}', "
-                f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                f"Search Results:\n{results['search'][:800]}"
-            )]
-        })
-        results["reader"] = rr["messages"][-1].content
-        st.session_state.results = dict(results)
-
-    # ── Step 3: Writer ──
-    with st.spinner("✍️  Writer is drafting the report…"):
-        research_combined = (
-            f"SEARCH RESULTS:\n{results['search']}\n\n"
-            f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
-        )
-        results["writer"] = writer_chain.invoke({
-            "topic": topic_val,
-            "research": research_combined
-        })
-        st.session_state.results = dict(results)
-
-    # ── Step 4: Critic ──
-    with st.spinner("🧐  Critic is reviewing the report…"):
-        results["critic"] = crictic_chain.invoke({
-            "report": results["writer"]
-        })
-        st.session_state.results = dict(results)
-
-    st.session_state.running = False
-    st.session_state.done = True
-    st.rerun()
 
 
 # ── Results display ───────────────────────────────────────────────────────────
 r = st.session_state.results
 
+if st.session_state.error:
+    st.error(st.session_state.error)
+
 if r:
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Results</div>', unsafe_allow_html=True)
 
-    # Raw outputs in expanders
-    if "search" in r:
-        with st.expander("🔍 Search Results (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Search Agent Output</div>'
-                        f'<div class="result-content">{r["search"]}</div></div>', unsafe_allow_html=True)
+    metrics = st.columns(3)
+    metrics[0].metric("Sources Found", len(r.get("search_results", [])))
+    metrics[1].metric("Pages Scraped", len(r.get("scraped_sources", [])))
+    metrics[2].metric("Revision Rounds", r.get("revision_count", 0))
 
-    if "reader" in r:
-        with st.expander("📄 Scraped Content (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Reader Agent Output</div>'
-                        f'<div class="result-content">{r["reader"]}</div></div>', unsafe_allow_html=True)
+    if r.get("search_results"):
+        with st.expander("🔍 Search Results", expanded=False):
+            for item in r["search_results"]:
+                st.markdown(
+                    f"**{item['title']}**\n\n"
+                    f"{item['snippet']}\n\n"
+                    f"[Open source]({item['url']})"
+                )
+                st.markdown("---")
 
-    # Final report
-    if "writer" in r:
+    if r.get("scraped_sources"):
+        with st.expander("📄 Scraped Source Previews", expanded=False):
+            for item in r["scraped_sources"]:
+                title = item.get("title") or "Untitled page"
+                if item.get("success"):
+                    st.markdown(f"**{title}**")
+                    st.caption(item["url"])
+                    st.write(item.get("content", "")[:700] + "...")
+                else:
+                    st.markdown(f"**{title}**")
+                    st.caption(item["url"])
+                    st.error(item.get("error", "Scrape failed."))
+                st.markdown("---")
+
+    if r.get("report"):
         st.markdown("""
         <div class="report-panel">
             <div class="panel-label orange">📝 Final Research Report</div>
         """, unsafe_allow_html=True)
-        st.markdown(r["writer"])   # render markdown natively
+        st.markdown(r["report"])
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Download
         st.download_button(
             label="⬇  Download Report (.md)",
-            data=r["writer"],
+            data=r["report"],
             file_name=f"research_report_{int(time.time())}.md",
             mime="text/markdown",
         )
 
-    # Critic feedback
-    if "critic" in r:
+    if st.session_state.status_log:
+        with st.expander("Pipeline Log", expanded=False):
+            for step, message in st.session_state.status_log:
+                st.write(f"{step.title()}: {message}")
+
+    if r.get("critique"):
         st.markdown("""
         <div class="feedback-panel">
             <div class="panel-label green">🧐 Critic Feedback</div>
         """, unsafe_allow_html=True)
-        st.markdown(r["critic"])
+        critique = r["critique"]
+        if critique.get("score") is not None:
+            st.markdown(f"**Score:** {critique['score']}/10")
+        st.markdown(critique.get("raw", "No critique generated."))
         st.markdown("</div>", unsafe_allow_html=True)
 
 

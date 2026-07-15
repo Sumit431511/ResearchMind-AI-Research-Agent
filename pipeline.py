@@ -1,66 +1,34 @@
-from agents import build_reader_agent, build_search_agent, writer_chain, crictic_chain
+from __future__ import annotations
 
-def run_research_pipeline(topic:str)->dict:
-    state = {}
+from orchestrator import run_research_pipeline
 
-    print("\n"+"="*50)
-    print("Step 1 - search agent is working...")
-    print("="*50)
 
-    search_agent = build_search_agent()
-    search_result = search_agent.invoke({
-        "messages":[("user",f"Find recent, reliable and detailed information about : {topic}")]
-    })
+def _print_progress(step: str, message: str) -> None:
+    print(f"[{step.upper()}] {message}")
 
-    state["search_result"] = search_result['messages'][-1].content
 
-    print("\n search result",state["search_result"])
+def run_cli_pipeline(topic: str) -> dict:
+    state = run_research_pipeline(topic, progress_callback=_print_progress)
 
-    print("\n"+"="*50)
-    print("Step 2 - reader agent is working...")
-    print("="*50)
-    print(type(state['search_result']))
-    reader_agent = build_reader_agent()
-    reader_result = reader_agent.invoke({
-        "messages":[("user",
-                   f"Based om the following search results about '{topic}',"
-                   f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                   f"Search Results:\n{state['search_result'][:800]}"
-                   )]
-    })
-    state["scarped_content"] = reader_result['messages'][-1].content
+    print("\n" + "=" * 50)
+    print("Sources used")
+    print("=" * 50)
+    for item in state.search_results:
+        print(f"- {item.title} ({item.url})")
 
-    print("\nScarped Content : \n",state["scarped_content"])
+    print("\n" + "=" * 50)
+    print("Final report")
+    print("=" * 50)
+    print(state.report)
 
-    print("\n"+"="*50)
-    print("Step 3 - final report is generating...")
-    print("="*50)
+    print("\n" + "=" * 50)
+    print("Critic feedback")
+    print("=" * 50)
+    print(state.critique.raw if state.critique else "No critique generated.")
 
-    research_combined = (
-        f"SEARCH RESULT : \n{state['search_result']}\n\n"
-        f"DETAILED SCARPED CONTENT : \n {state['scarped_content']}"
-    )
-
-    state["report"] = writer_chain.invoke({
-        "topic":topic,
-        "research":research_combined
-    })
-
-    print("\n Final Report\n",state['report'])
-
-    print("\n"+"="*50)
-    print("Step 4 - Crictic is reviewing the report...")
-    print("="*50)
-
-    state["feedback"] = crictic_chain.invoke({
-        "report":state['report']
-    })
-
-    print("\nCrictic report\n",state['feedback'])
-
-    return state
+    return state.model_dump()
 
 
 if __name__ == "__main__":
-    topic = input("\nEnter a research topic : ")
-    run_research_pipeline(topic)
+    topic = input("\nEnter a research topic: ")
+    run_cli_pipeline(topic)
