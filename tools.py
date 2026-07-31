@@ -93,14 +93,14 @@ def scrape_page(url: str) -> ScrapedSource:
         for tag in soup(["script", "style", "nav", "footer", "noscript", "svg"]):
             tag.decompose()
 
-        title = None
+        title = ""
         if soup.title and soup.title.string:
             title = _clean_text(soup.title.string)
 
         content = _clean_text(soup.get_text(separator=" ", strip=True))
         return ScrapedSource(
             url=url,
-            title=title,
+            title=title or "",
             content=content[: settings.scrape_char_limit],
             success=True,
         )
@@ -108,7 +108,7 @@ def scrape_page(url: str) -> ScrapedSource:
         return ScrapedSource(
             url=url,
             success=False,
-            error=str(exc),
+            error=str(exc) or "An unknown error occurred",
         )
 
 
@@ -123,7 +123,7 @@ def scrape_url(url: str) -> str:
     """Scrape and return clean text content from a given URL for deeper reading."""
     result = scrape_page(url)
     if not result.success:
-        return f"Could not scrape URL: {result.error}"
+        return f"Could not scrape URL: {result.error or 'An unknown error occurred'}"
 
     title = result.title or "Untitled page"
     return f"Title: {title}\nURL: {result.url}\nContent: {result.content}"
