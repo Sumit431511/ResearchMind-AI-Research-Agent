@@ -323,18 +323,6 @@ if "error" not in st.session_state:
 if "status_log" not in st.session_state:
     st.session_state.status_log = []
 
-if run_btn and topic:
-    try:
-        r = run_research_pipeline(topic)
-        if r is not None:
-            if 'error' in r:
-                st.session_state.error = r['error']
-            else:
-                st.session_state.error = 'Invalid response from run_research_pipeline'
-        else:
-            st.session_state.error = 'No response from run_research_pipeline'
-    except Exception as e:
-        st.session_state.error = str(e)
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
 st.markdown("""
