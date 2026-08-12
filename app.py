@@ -342,7 +342,7 @@ st.markdown("""
 col_input, col_spacer, col_pipeline = st.columns([5, 0.5, 4])
 
 with col_input:
-    st.markdown('<div class="input-card">', unsafe_allow_html=True)
+    #st.markdown('<div class="input-card">', unsafe_allow_html=True)
     topic = st.text_input(
         "Research Topic",
         placeholder="e.g. Quantum computing breakthroughs in 2025",
