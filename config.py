@@ -30,7 +30,8 @@ def _get_float(name: str, default: float) -> float:
 
 @dataclass(frozen=True)
 class Settings:
-    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Updated to the latest supported Groq model (as of 2024-08-21)
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.2-90b-text-preview")
     groq_temperature: float = _get_float("GROQ_TEMPERATURE", 0.0)
     search_results_limit: int = _get_int("SEARCH_RESULTS_LIMIT", 5)
     scrape_source_limit: int = _get_int("SCRAPE_SOURCE_LIMIT", 3)
