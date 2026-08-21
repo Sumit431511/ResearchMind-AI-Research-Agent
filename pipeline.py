@@ -1,23 +1,13 @@
 from __future__ import annotations
 
-import os
-
 from orchestrator import run_research_pipeline
-from auth import verify_api_key
 
 
 def _print_progress(step: str, message: str) -> None:
     print(f"[{step.upper()}] {message}")
 
 
-def run_cli_pipeline(topic: str, api_key: str | None = None) -> dict:
-    # ---- AUTH CHECK ----------------------------------------------------
-    if api_key is None:
-        raise PermissionError("An API key must be supplied via --api-key.")
-    if not verify_api_key(api_key):
-        raise PermissionError("Invalid API key.")
-    # -------------------------------------------------------------------
-
+def run_cli_pipeline(topic: str) -> dict:
     state = run_research_pipeline(topic, progress_callback=_print_progress)
 
     print("\n" + "=" * 50)
@@ -41,12 +31,4 @@ def run_cli_pipeline(topic: str, api_key: str | None = None) -> dict:
 
 if __name__ == "__main__":
     topic = input("\nEnter a research topic: ")
-    # Try to obtain API key from environment, otherwise prompt the user.
-    api_key = os.getenv("RESEARCH_PIPELINE_API_KEY")
-    if not api_key:
-        api_key = input("Enter API key: ")
-    try:
-        run_cli_pipeline(topic, api_key=api_key)
-    except PermissionError as exc:
-        print(f"❌ Authentication failed: {exc}")
-        exit(1)
+    run_cli_pipeline(topic)
