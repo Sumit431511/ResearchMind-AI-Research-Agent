@@ -2,6 +2,9 @@
 
 ResearchMind is a multi-stage AI research pipeline that researches a topic end-to-end: searching the web, scraping multiple sources, drafting a structured report, critiquing the draft, and optionally revising it once before returning the final output.
 
+## You can test it here : https://researchmind-ai-research-agent.streamlit.app/
+
+
 ## How it works
 
 The pipeline now runs through a shared orchestration layer so both the CLI and Streamlit app use the same logic:
